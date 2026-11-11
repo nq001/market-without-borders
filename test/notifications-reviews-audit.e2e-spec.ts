@@ -4,8 +4,9 @@ import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { DataSource } from 'typeorm';
 import { User } from '../src/database/entities/user.entity';
+import { Category } from '../src/database/entities/category.entity';
 import { Product } from '../src/database/entities/product.entity';
-import { Order } from '../src/database/entities/order.entity';
+import { Order, OrderStatus } from '../src/database/entities/order.entity';
 import { OrderItem } from '../src/database/entities/order-item.entity';
 import { Review } from '../src/database/entities/review.entity';
 import { AuditLog } from '../src/database/entities/audit-log.entity';
@@ -20,6 +21,7 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
   let eventEmitter: EventEmitter2;
 
   let testUser: User;
+  let testCategory: Category;
   let testProduct: Product;
   let testOrder: Order;
   let userToken: string;
@@ -51,18 +53,25 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
       roles: ['CUSTOMER'],
     });
 
+    testCategory = dataSource.getRepository(Category).create({
+      name: `ReviewCat_${Date.now()}`,
+      slug: `review-cat-${Date.now()}`,
+    });
+    await dataSource.getRepository(Category).save(testCategory);
+
     testProduct = dataSource.getRepository(Product).create({
       sku: `SKU-${Date.now()}`,
       name: 'Reviewable Product',
       description: 'Desc',
       price: 100,
+      category_id: testCategory.id,
       is_active: true,
     });
     await dataSource.getRepository(Product).save(testProduct);
 
     testOrder = dataSource.getRepository(Order).create({
       user_id: testUser.id,
-      status: 'PAID', // Needs to be paid for review verified purchase
+      status: OrderStatus.PAID, // Needs to be paid for review verified purchase
       total_amount: 100,
       subtotal_amount: 100,
       discount_amount: 0,
@@ -72,15 +81,16 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
     const orderItem = dataSource.getRepository(OrderItem).create({
       order_id: testOrder.id,
       product_id: testProduct.id,
+      product_name_snapshot: testProduct.name,
+      sku_snapshot: testProduct.sku,
       quantity: 1,
-      unit_price: 100,
-      subtotal: 100,
+      unit_price_snapshot: 100,
+      line_total: 100,
     });
     await dataSource.getRepository(OrderItem).save(orderItem);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
     await app.close();
   });
 
@@ -123,6 +133,7 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
         sku: `SKU-UNP-${Date.now()}`,
         name: 'Unpurchased',
         price: 10,
+        category_id: testCategory.id,
         is_active: true,
       });
       await dataSource.getRepository(Product).save(unpurchasedProduct);
@@ -142,13 +153,10 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
   describe('Notifications (Outbox Pattern)', () => {
     it('should create a PENDING notification when order.paid event is emitted', async () => {
       // Manually emit the event instead of running full payment cycle
-      eventEmitter.emit('order.paid', {
+      await eventEmitter.emitAsync('order.paid', {
         orderId: testOrder.id,
         userId: testUser.id,
       });
-
-      // Give event emitter a moment to process async listener
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const notifications = await dataSource.getRepository(Notification).find({
         where: { user_id: testUser.id, type: 'ORDER_CONFIRMATION' },

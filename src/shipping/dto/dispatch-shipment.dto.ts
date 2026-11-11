@@ -26,3 +26,4 @@ export class DispatchShipmentDto {
   @MaxLength(100)
   carrier?: string;
 }
+

@@ -12,3 +12,4 @@ export abstract class ValueObject<TProps> {
     return JSON.stringify(this.props) === JSON.stringify(other.props);
   }
 }
+

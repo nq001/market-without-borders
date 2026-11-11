@@ -12,3 +12,4 @@ export class TypeOrmUnitOfWork implements IUnitOfWork {
     return this.dataSource.transaction(work);
   }
 }
+

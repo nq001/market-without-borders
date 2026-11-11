@@ -5,3 +5,4 @@ export interface ICachePort {
   set(key: string, value: string, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
 }
+

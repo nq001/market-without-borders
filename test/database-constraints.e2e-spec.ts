@@ -3,11 +3,15 @@ import { INestApplication } from '@nestjs/common';
 import { AppModule } from './../src/app.module';
 import { DataSource } from 'typeorm';
 import { PaymentEvent } from '../src/database/entities/payment-event.entity';
+import { User } from '../src/database/entities/user.entity';
+import { Order, OrderStatus } from '../src/database/entities/order.entity';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('Database Constraints & Transactions (Integration)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let testUser: User;
+  let testOrder: Order;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,16 +22,32 @@ describe('Database Constraints & Transactions (Integration)', () => {
     await app.init();
 
     dataSource = app.get(DataSource);
+
+    testUser = dataSource.getRepository(User).create({
+      email: `db_constraints_${Date.now()}@test.com`,
+      password_hash: 'hash',
+      first_name: 'DB',
+      last_name: 'Constraint',
+    });
+    await dataSource.getRepository(User).save(testUser);
+
+    testOrder = dataSource.getRepository(Order).create({
+      user_id: testUser.id,
+      status: OrderStatus.PENDING_PAYMENT,
+      total_amount: 100,
+      subtotal_amount: 100,
+      discount_amount: 0,
+    });
+    await dataSource.getRepository(Order).save(testOrder);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
     await app.close();
   });
 
   it('should enforce unique provider_event_id on payment events', async () => {
     const eventId = uuidv4();
-    const orderId = uuidv4(); // dummy UUID
+    const orderId = testOrder.id;
 
     const repo = dataSource.getRepository(PaymentEvent);
 
@@ -55,7 +75,7 @@ describe('Database Constraints & Transactions (Integration)', () => {
   it('should rollback transaction on error', async () => {
     const repo = dataSource.getRepository(PaymentEvent);
     const eventId = uuidv4();
-    const orderId = uuidv4();
+    const orderId = testOrder.id;
 
     try {
       await dataSource.transaction(async (manager) => {

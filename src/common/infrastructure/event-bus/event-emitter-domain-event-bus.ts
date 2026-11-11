@@ -17,3 +17,4 @@ export class EventEmitterDomainEventBus implements IDomainEventBus {
     }
   }
 }
+

@@ -13,3 +13,4 @@ export class ConsoleEmailNotificationAdapter implements INotificationSenderPort 
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
+

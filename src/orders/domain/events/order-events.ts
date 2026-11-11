@@ -35,3 +35,4 @@ export class OrderCancelledDomainEvent implements DomainEvent {
     public readonly reason: string,
   ) {}
 }
+
