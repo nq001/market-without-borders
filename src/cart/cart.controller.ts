@@ -6,64 +6,114 @@ import {
   Patch,
   Param,
   Delete,
+  ParseUUIDPipe,
   UseGuards,
-  Req,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ApplyCouponDto } from './dto/apply-coupon.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Request } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-  };
-}
-
+@ApiTags('cart')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
+  @ApiOperation({ summary: 'Retrieve the current user cart' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the cart and computed pricing.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @Get()
-  getCart(@Req() req: AuthenticatedRequest) {
-    return this.cartService.getCartAndPricing(req.user.id);
+  getCart(@CurrentUser('sub') userId: string) {
+    return this.cartService.getCartAndPricing(userId);
   }
 
+  @ApiOperation({ summary: 'Add an item to the cart' })
+  @ApiResponse({ status: 201, description: 'Item added to cart successfully.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or insufficient inventory.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Product not found.' })
   @Post('items')
-  addItem(@Req() req: AuthenticatedRequest, @Body() dto: AddCartItemDto) {
-    return this.cartService.addItem(req.user.id, dto);
+  addItem(@CurrentUser('sub') userId: string, @Body() dto: AddCartItemDto) {
+    return this.cartService.addItem(userId, dto);
   }
 
+  @ApiOperation({ summary: 'Update the quantity of a cart item' })
+  @ApiParam({
+    name: 'productId',
+    description: 'The UUID of the product in the cart',
+    format: 'uuid',
+  })
+  @ApiBody({ type: UpdateCartItemDto })
+  @ApiResponse({ status: 200, description: 'Quantity updated successfully.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or insufficient inventory.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Product not in cart.' })
   @Patch('items/:productId')
   updateItemQuantity(
-    @Req() req: AuthenticatedRequest,
-    @Param('productId') productId: string,
-    @Body('quantity') quantity: number,
+    @CurrentUser('sub') userId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+    @Body() dto: UpdateCartItemDto,
   ) {
-    return this.cartService.updateItemQuantity(
-      req.user.id,
-      productId,
-      quantity,
-    );
+    return this.cartService.updateItemQuantity(userId, productId, dto.quantity);
   }
 
+  @ApiOperation({ summary: 'Remove an item from the cart' })
+  @ApiParam({
+    name: 'productId',
+    description: 'The UUID of the product to remove',
+    format: 'uuid',
+  })
+  @ApiResponse({ status: 200, description: 'Item removed from cart.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Product not in cart.' })
   @Delete('items/:productId')
   removeItem(
-    @Req() req: AuthenticatedRequest,
-    @Param('productId') productId: string,
+    @CurrentUser('sub') userId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
   ) {
-    return this.cartService.removeItem(req.user.id, productId);
+    return this.cartService.removeItem(userId, productId);
   }
 
+  @ApiOperation({ summary: 'Apply a discount coupon to the cart' })
+  @ApiResponse({ status: 201, description: 'Coupon applied successfully.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Coupon invalid, expired, or usage limit reached.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @Post('coupon')
-  applyCoupon(@Req() req: AuthenticatedRequest, @Body() dto: ApplyCouponDto) {
-    return this.cartService.applyCoupon(req.user.id, dto);
+  applyCoupon(@CurrentUser('sub') userId: string, @Body() dto: ApplyCouponDto) {
+    return this.cartService.applyCoupon(userId, dto);
   }
 
+  @ApiOperation({
+    summary: 'Remove the currently applied coupon from the cart',
+  })
+  @ApiResponse({ status: 200, description: 'Coupon removed successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @Delete('coupon')
-  removeCoupon(@Req() req: AuthenticatedRequest) {
-    return this.cartService.removeCoupon(req.user.id);
+  removeCoupon(@CurrentUser('sub') userId: string) {
+    return this.cartService.removeCoupon(userId);
   }
 }

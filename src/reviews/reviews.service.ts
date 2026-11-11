@@ -1,42 +1,51 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review } from '../database/entities/review.entity';
-import { Order } from '../database/entities/order.entity';
+import { OrdersService } from '../orders/orders.service';
+import { BusinessRuleViolationException } from '../common/domain/domain-exception.base';
 
 @Injectable()
 export class ReviewsService {
   constructor(
     @InjectRepository(Review)
     private readonly reviewRepo: Repository<Review>,
-    @InjectRepository(Order)
-    private readonly orderRepo: Repository<Order>,
+    private readonly ordersService: OrdersService,
   ) {}
 
-  async createReview(userId: string, productId: string, rating: number, comment: string) {
-    // 1. Check if user already reviewed
+  async createReview(
+    userId: string,
+    productId: string,
+    rating: number,
+    comment: string,
+  ) {
+    if (rating < 1 || rating > 5) {
+      throw new BusinessRuleViolationException(
+        'Rating must be between 1 and 5',
+      );
+    }
+
     const existing = await this.reviewRepo.findOne({
-      where: { user_id: userId, product_id: productId }
+      where: { user_id: userId, product_id: productId },
     });
 
     if (existing) {
-      throw new BadRequestException('You have already reviewed this product.');
+      throw new BusinessRuleViolationException(
+        'You have already reviewed this product.',
+      );
     }
 
-    // 2. Check if verified purchase
-    // Look for any PAID, SHIPPED, or DELIVERED order containing this product for this user.
-    const hasPurchased = await this.orderRepo.createQueryBuilder('order')
-      .innerJoin('order.orderItems', 'item')
-      .where('order.user_id = :userId', { userId })
-      .andWhere('item.product_id = :productId', { productId })
-      .andWhere('order.status IN (:...statuses)', { statuses: ['PAID', 'SHIPPED', 'DELIVERED'] })
-      .getExists();
+    const hasPurchased = await this.ordersService.hasUserPurchasedProduct(
+      userId,
+      productId,
+    );
 
     if (!hasPurchased) {
-      throw new BadRequestException('You can only review products you have purchased.');
+      throw new BusinessRuleViolationException(
+        'You can only review products you have purchased.',
+      );
     }
 
-    // 3. Create Review
     const review = this.reviewRepo.create({
       user_id: userId,
       product_id: productId,
@@ -51,7 +60,9 @@ export class ReviewsService {
 
   async approveReview(reviewId: string) {
     const review = await this.reviewRepo.findOne({ where: { id: reviewId } });
-    if (!review) throw new BadRequestException('Review not found');
+    if (!review) {
+      throw new BusinessRuleViolationException('Review not found');
+    }
 
     review.status = 'APPROVED';
     return this.reviewRepo.save(review);

@@ -8,6 +8,8 @@ import { OrderAddressSnapshot } from '../database/entities/order-address-snapsho
 import { IdempotencyKey } from '../database/entities/idempotency-key.entity';
 import { CartModule } from '../cart/cart.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { CouponsModule } from '../coupons/coupons.module';
+import { VERIFIED_PURCHASE_PORT } from './application/ports/verified-purchase.port';
 
 @Module({
   imports: [
@@ -19,8 +21,16 @@ import { InventoryModule } from '../inventory/inventory.module';
     ]),
     CartModule,
     InventoryModule,
+    CouponsModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [
+    OrdersService,
+    {
+      provide: VERIFIED_PURCHASE_PORT,
+      useExisting: OrdersService,
+    },
+  ],
+  exports: [OrdersService, VERIFIED_PURCHASE_PORT],
 })
 export class OrdersModule {}

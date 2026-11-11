@@ -14,6 +14,16 @@ import { OrderItem } from './order-item.entity';
 import { OrderAddressSnapshot } from './order-address-snapshot.entity';
 import { PaymentEvent } from './payment-event.entity';
 import { Shipment } from './shipment.entity';
+import { BusinessRuleViolationException } from '../../common/domain/domain-exception.base';
+
+export enum OrderStatus {
+  PENDING_PAYMENT = 'PENDING_PAYMENT',
+  PAID = 'PAID',
+  PAYMENT_FAILED = 'PAYMENT_FAILED',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+}
 
 @Entity('orders')
 export class Order {
@@ -60,4 +70,72 @@ export class Order {
 
   @OneToOne(() => Shipment, (shipment) => shipment.order)
   shipment: Shipment;
+
+  // --- Rich Domain Behavior ---
+
+  public canAcceptPayment(): boolean {
+    return this.status === OrderStatus.PENDING_PAYMENT;
+  }
+
+  public isPaidOrBeyond(): boolean {
+    return (
+      this.status === OrderStatus.PAID ||
+      this.status === OrderStatus.SHIPPED ||
+      this.status === OrderStatus.DELIVERED
+    );
+  }
+
+  public markPaid(): void {
+    if (this.status === OrderStatus.PAID) {
+      return;
+    }
+    if (this.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessRuleViolationException(
+        `Cannot transition order ${this.id} from ${this.status} to PAID`,
+      );
+    }
+    this.status = OrderStatus.PAID;
+  }
+
+  public markPaymentFailed(): boolean {
+    if (this.isPaidOrBeyond()) {
+      // Guard against out-of-order payment.failed webhook overwriting a PAID/SHIPPED/DELIVERED order
+      return false;
+    }
+    if (this.status === OrderStatus.PAYMENT_FAILED) {
+      return false;
+    }
+    this.status = OrderStatus.PAYMENT_FAILED;
+    return true;
+  }
+
+  public markShipped(): void {
+    if (this.status === OrderStatus.SHIPPED) {
+      return;
+    }
+    if (
+      this.status !== OrderStatus.PAID &&
+      this.status !== OrderStatus.PENDING_PAYMENT
+    ) {
+      throw new BusinessRuleViolationException(
+        `Cannot transition order ${this.id} from ${this.status} to SHIPPED`,
+      );
+    }
+    this.status = OrderStatus.SHIPPED;
+  }
+
+  public markDelivered(): void {
+    if (this.status === OrderStatus.DELIVERED) {
+      return;
+    }
+    if (
+      this.status !== OrderStatus.SHIPPED &&
+      this.status !== OrderStatus.PAID
+    ) {
+      throw new BusinessRuleViolationException(
+        `Cannot transition order ${this.id} from ${this.status} to DELIVERED`,
+      );
+    }
+    this.status = OrderStatus.DELIVERED;
+  }
 }

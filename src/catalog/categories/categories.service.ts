@@ -1,13 +1,14 @@
-import {
-  Injectable,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../../database/entities/category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import {
+  BusinessRuleViolationException,
+  ConflictDomainException,
+  EntityNotFoundDomainException,
+} from '../../common/domain/domain-exception.base';
 
 @Injectable()
 export class CategoriesService {
@@ -25,9 +26,13 @@ export class CategoriesService {
     });
 
     if (existing) {
-      throw new ConflictException(
+      throw new ConflictDomainException(
         'Category with this name or slug already exists',
       );
+    }
+
+    if (createCategoryDto.parent_id) {
+      await this.findOne(createCategoryDto.parent_id);
     }
 
     const category = this.categoryRepository.create(createCategoryDto);
@@ -35,7 +40,6 @@ export class CategoriesService {
   }
 
   async findAll(): Promise<Category[]> {
-    // Return all categories with their parent/children to allow building a tree
     return this.categoryRepository.find({
       relations: ['parent', 'children'],
     });
@@ -47,7 +51,9 @@ export class CategoriesService {
       relations: ['parent', 'children', 'products'],
     });
     if (!category) {
-      throw new NotFoundException(`Category with ID "${id}" not found`);
+      throw new EntityNotFoundDomainException(
+        `Category with ID "${id}" not found`,
+      );
     }
     return category;
   }
@@ -66,9 +72,32 @@ export class CategoriesService {
         ],
       });
       if (existing && existing.id !== id) {
-        throw new ConflictException(
+        throw new ConflictDomainException(
           'Category with this name or slug already exists',
         );
+      }
+    }
+
+    if (updateCategoryDto.parent_id !== undefined) {
+      if (updateCategoryDto.parent_id === id) {
+        throw new BusinessRuleViolationException(
+          'A category cannot be its own parent',
+        );
+      }
+
+      if (updateCategoryDto.parent_id) {
+        let currentParentId: string | null = updateCategoryDto.parent_id;
+        const visited = new Set<string>([id]);
+        while (currentParentId) {
+          if (visited.has(currentParentId)) {
+            throw new BusinessRuleViolationException(
+              'Circular category hierarchy detected',
+            );
+          }
+          visited.add(currentParentId);
+          const parentCat = await this.findOne(currentParentId);
+          currentParentId = parentCat.parent_id ?? null;
+        }
       }
     }
 
@@ -80,13 +109,13 @@ export class CategoriesService {
     const category = await this.findOne(id);
 
     if (category.children && category.children.length > 0) {
-      throw new ConflictException(
+      throw new ConflictDomainException(
         'Cannot delete category because it has child categories',
       );
     }
 
     if (category.products && category.products.length > 0) {
-      throw new ConflictException(
+      throw new ConflictDomainException(
         'Cannot delete category because it has products',
       );
     }

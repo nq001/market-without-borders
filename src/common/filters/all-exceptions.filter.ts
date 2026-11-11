@@ -7,6 +7,15 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import {
+  DomainException,
+  IDomainException,
+} from '../domain/domain-exception.base';
+
+interface HttpExceptionResponseBody {
+  message?: string | string[];
+  error?: string;
+}
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -20,33 +29,52 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let code = 'INTERNAL_ERROR';
+    let details: string[] | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const res = exception.getResponse() as Record<string, unknown>;
+      const rawRes = exception.getResponse();
+      const res: HttpExceptionResponseBody =
+        typeof rawRes === 'object' && rawRes !== null
+          ? (rawRes as HttpExceptionResponseBody)
+          : { message: String(rawRes) };
 
-      let messageStr = (res.message as string | string[]) || exception.message;
-      if (Array.isArray(messageStr)) {
-        messageStr = messageStr[0]; // Take first validation error message
+      const messageVal = res.message || exception.message;
+      if (Array.isArray(messageVal)) {
+        details = messageVal;
+        message = messageVal[0];
+      } else {
+        message = messageVal;
       }
-      message = messageStr;
 
-      code =
-        typeof res.error === 'string'
-          ? res.error.toUpperCase().replace(/\s+/g, '_')
-          : 'HTTP_ERROR';
+      if ('code' in exception && typeof (exception as IDomainException).code === 'string') {
+        code = (exception as IDomainException).code;
+      } else {
+        code =
+          typeof res.error === 'string'
+            ? res.error.toUpperCase().replace(/\s+/g, '_')
+            : 'HTTP_ERROR';
+      }
+    } else if (exception instanceof DomainException) {
+      status = HttpStatus.BAD_REQUEST;
+      message = exception.message;
+      code = exception.code;
     } else if (exception instanceof Error) {
       this.logger.error(
         `Unhandled Exception: ${exception.message}`,
         exception.stack,
       );
+    } else {
+      this.logger.error(
+        `Unhandled non-Error exception: ${JSON.stringify(exception)}`,
+      );
     }
 
-    // Do not leak stack traces
     response.status(status).json({
       statusCode: status,
       code,
       message,
+      ...(details ? { details } : {}),
       timestamp: new Date().toISOString(),
       path: request.url,
     });

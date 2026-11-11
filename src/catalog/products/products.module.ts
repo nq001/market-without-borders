@@ -5,19 +5,33 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { ProductsService } from './products.service';
 import { ProductsController } from './products.controller';
 import { Product } from '../../database/entities/product.entity';
-import { Inventory } from '../../database/entities/inventory.entity';
-import { Category } from '../../database/entities/category.entity';
+import { CategoriesModule } from '../categories/categories.module';
+import { InventoryModule } from '../../inventory/inventory.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, Inventory, Category]),
+    TypeOrmModule.forFeature([Product]),
+    CategoriesModule,
+    InventoryModule,
     CacheModule.registerAsync({
-      useFactory: async () => ({
-        store: await redisStore({
-          url: process.env.REDIS_URL || 'redis://localhost:6379',
+      useFactory: async () => {
+        const redisEnabled = process.env.REDIS_ENABLED === 'true';
+        if (redisEnabled && process.env.REDIS_URL) {
+          try {
+            return {
+              store: await redisStore({
+                url: process.env.REDIS_URL,
+                ttl: 60000,
+              }),
+            };
+          } catch {
+            // Fall back to in-memory cache if Redis is not reachable
+          }
+        }
+        return {
           ttl: 60000,
-        }),
-      }),
+        };
+      },
     }),
   ],
   controllers: [ProductsController],

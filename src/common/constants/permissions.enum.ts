@@ -1,0 +1,25 @@
+export enum PermissionAction {
+  // Legacy / granular action codes used in controllers
+  CREATE_CATEGORY = 'CREATE_CATEGORY',
+  UPDATE_CATEGORY = 'UPDATE_CATEGORY',
+  DELETE_CATEGORY = 'DELETE_CATEGORY',
+  CREATE_PRODUCT = 'CREATE_PRODUCT',
+  UPDATE_PRODUCT = 'UPDATE_PRODUCT',
+  DELETE_PRODUCT = 'DELETE_PRODUCT',
+  ADJUST_INVENTORY = 'ADJUST_INVENTORY',
+  VIEW_INVENTORY = 'VIEW_INVENTORY',
+  CREATE_COUPON = 'CREATE_COUPON',
+  VIEW_COUPON = 'VIEW_COUPON',
+  UPDATE_COUPON = 'UPDATE_COUPON',
+  DELETE_COUPON = 'DELETE_COUPON',
+  APPROVE_REVIEW = 'APPROVE_REVIEW',
+  MANAGE_SHIPPING = 'MANAGE_SHIPPING',
+
+  // Canonical grouped action codes
+  INVENTORY_UPDATE = 'inventory.update',
+  CATALOG_MANAGE = 'catalog.manage',
+  ORDERS_VIEW = 'orders.view',
+  COUPONS_MANAGE = 'coupons.manage',
+  SHIPPING_MANAGE = 'shipping.manage',
+  REVIEWS_APPROVE = 'reviews.approve',
+}

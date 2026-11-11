@@ -8,9 +8,27 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { TokenPayload } from '../auth.service';
 
+const PERMISSION_GROUP_ALIASES: Record<string, string[]> = {
+  CREATE_CATEGORY: ['catalog.manage'],
+  UPDATE_CATEGORY: ['catalog.manage'],
+  DELETE_CATEGORY: ['catalog.manage'],
+  CREATE_PRODUCT: ['catalog.manage'],
+  UPDATE_PRODUCT: ['catalog.manage'],
+  DELETE_PRODUCT: ['catalog.manage'],
+  ADJUST_INVENTORY: ['inventory.update'],
+  VIEW_INVENTORY: ['inventory.update'],
+  CREATE_COUPON: ['coupons.manage', 'catalog.manage'],
+  VIEW_COUPON: ['coupons.manage', 'catalog.manage'],
+  UPDATE_COUPON: ['coupons.manage', 'catalog.manage'],
+  DELETE_COUPON: ['coupons.manage', 'catalog.manage'],
+  APPROVE_REVIEW: ['reviews.approve', 'catalog.manage'],
+  MANAGE_SHIPPING: ['shipping.manage'],
+  ADMIN: ['shipping.manage'],
+};
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
@@ -19,26 +37,36 @@ export class PermissionsGuard implements CanActivate {
     );
 
     if (!requiredPermissions || requiredPermissions.length === 0) {
-      return true; // No permissions required
+      return true;
     }
 
-    const request = context.switchToHttp().getRequest<unknown>() as {
-      user: TokenPayload | undefined;
-    };
+    const request = context.switchToHttp().getRequest<{
+      user?: TokenPayload;
+    }>();
     const payload = request.user;
 
     if (!payload) {
       return false;
     }
 
-    if (payload.roles.includes('ADMIN')) {
-      return true; // Admin has all permissions
+    const roles = Array.isArray(payload.roles) ? payload.roles : [];
+    if (roles.includes('ADMIN')) {
+      return true;
     }
 
-    const hasPermission = () =>
-      requiredPermissions.every((perm) => payload.permissions.includes(perm));
+    const userPermissions = Array.isArray(payload.permissions)
+      ? payload.permissions
+      : [];
 
-    if (!hasPermission()) {
+    const hasPermission = requiredPermissions.every((requiredPerm) => {
+      if (userPermissions.includes(requiredPerm)) {
+        return true;
+      }
+      const aliases = PERMISSION_GROUP_ALIASES[requiredPerm] ?? [];
+      return aliases.some((alias) => userPermissions.includes(alias));
+    });
+
+    if (!hasPermission) {
       throw new ForbiddenException('Insufficient permissions');
     }
 

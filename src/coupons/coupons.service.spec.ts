@@ -33,7 +33,11 @@ describe('CouponsService', () => {
     repo.create.mockReturnValue({ code: 'NEWCODE' });
     repo.save.mockResolvedValue({ id: '1', code: 'NEWCODE' });
 
-    const result = await service.create({ code: 'NEWCODE', discount_type: 'FIXED', discount_amount: 10 } as any);
+    const result = await service.create({
+      code: 'NEWCODE',
+      discount_type: 'FIXED',
+      discount_amount: 10,
+    } as any);
     expect(result.code).toBe('NEWCODE');
     expect(repo.create).toHaveBeenCalled();
   });
@@ -42,7 +46,11 @@ describe('CouponsService', () => {
     repo.findOne.mockResolvedValue({ id: '1', code: 'EXISTING' });
 
     await expect(
-      service.create({ code: 'EXISTING', discount_type: 'FIXED', discount_amount: 10 } as any),
+      service.create({
+        code: 'EXISTING',
+        discount_type: 'FIXED',
+        discount_amount: 10,
+      } as any),
     ).rejects.toThrow(ConflictException);
   });
 });
