@@ -4,3 +4,4 @@ export interface DomainEvent {
   readonly occurredOn: Date;
   readonly aggregateId: string;
 }
+

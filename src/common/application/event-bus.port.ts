@@ -6,3 +6,4 @@ export interface IDomainEventBus {
   publish(event: DomainEvent): Promise<void>;
   publishAll(events: DomainEvent[]): Promise<void>;
 }
+

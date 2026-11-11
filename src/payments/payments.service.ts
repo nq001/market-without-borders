@@ -103,6 +103,11 @@ export class PaymentsService {
       throw error;
     }
 
+    let eventToEmit: {
+      name: string;
+      payload: Record<string, unknown>;
+    } | null = null;
+
     await this.dataSource.transaction(async (manager) => {
       if (this.ordersService) {
         if (type === 'payment.succeeded') {
@@ -122,11 +127,14 @@ export class PaymentsService {
           event.internal_status = 'PROCESSED';
           await manager.save(event);
 
-          this.eventEmitter.emit('order.paid', {
-            orderId: order.id,
-            userId: order.user_id,
-            paymentEventId: event_id,
-          });
+          eventToEmit = {
+            name: 'order.paid',
+            payload: {
+              orderId: order.id,
+              userId: order.user_id,
+              paymentEventId: event_id,
+            },
+          };
         } else if (type === 'payment.failed') {
           const { order, transitioned } =
             await this.ordersService.failOrderPayment(order_id, manager);
@@ -134,11 +142,14 @@ export class PaymentsService {
           await manager.save(event);
 
           if (transitioned) {
-            this.eventEmitter.emit('order.cancelled', {
-              orderId: order.id,
-              userId: order.user_id,
-              reason: 'PAYMENT_FAILED',
-            });
+            eventToEmit = {
+              name: 'order.cancelled',
+              payload: {
+                orderId: order.id,
+                userId: order.user_id,
+                reason: 'PAYMENT_FAILED',
+              },
+            };
           }
         }
         return;
@@ -164,10 +175,13 @@ export class PaymentsService {
         event.internal_status = 'PROCESSED';
         await manager.save(event);
 
-        this.eventEmitter.emit('order.paid', {
-          orderId: order.id,
-          userId: order.user_id,
-        });
+        eventToEmit = {
+          name: 'order.paid',
+          payload: {
+            orderId: order.id,
+            userId: order.user_id,
+          },
+        };
       } else if (type === 'payment.failed') {
         if (
           order.status !== OrderStatus.PAID &&
@@ -182,6 +196,18 @@ export class PaymentsService {
         await manager.save(event);
       }
     });
+
+    if (eventToEmit) {
+      const { name, payload: eventPayload } = eventToEmit as {
+        name: string;
+        payload: Record<string, unknown>;
+      };
+      if (typeof this.eventEmitter.emitAsync === 'function') {
+        await this.eventEmitter.emitAsync(name, eventPayload);
+      } else {
+        this.eventEmitter.emit(name, eventPayload);
+      }
+    }
 
     return { status: 'processed' };
   }

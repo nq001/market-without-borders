@@ -19,3 +19,4 @@ export abstract class BaseEntity<TId = string> {
     return this._id === other._id;
   }
 }
+

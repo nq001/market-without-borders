@@ -23,3 +23,4 @@ export enum PermissionAction {
   SHIPPING_MANAGE = 'shipping.manage',
   REVIEWS_APPROVE = 'reviews.approve',
 }
+

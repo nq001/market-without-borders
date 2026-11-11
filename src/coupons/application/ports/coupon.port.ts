@@ -7,3 +7,4 @@ export interface ICouponPort {
   findByCode(code: string): Promise<Coupon>;
   redeemCoupon(couponId: string, manager?: EntityManager): Promise<void>;
 }
+

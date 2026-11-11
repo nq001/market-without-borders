@@ -18,3 +18,4 @@ export abstract class AggregateRoot<TId = string> extends BaseEntity<TId> {
     return events;
   }
 }
+

@@ -7,3 +7,4 @@ export interface IUserRepositoryPort {
   findById(id: string): Promise<User | null>;
   createCustomerUser(userData: Partial<User>): Promise<User>;
 }
+

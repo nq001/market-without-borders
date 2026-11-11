@@ -91,7 +91,6 @@ describe('Orders & Checkout (e2e)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
     await app.close();
   });
 

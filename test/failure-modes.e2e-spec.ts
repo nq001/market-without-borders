@@ -4,6 +4,7 @@ import { AppModule } from './../src/app.module';
 import { DataSource } from 'typeorm';
 import { OrdersService } from '../src/orders/orders.service';
 import { IdempotencyKey } from '../src/database/entities/idempotency-key.entity';
+import { User } from '../src/database/entities/user.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { ConflictException } from '@nestjs/common';
 
@@ -11,6 +12,7 @@ describe('Failure Modes & Boundary Testing', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let ordersService: OrdersService;
+  let testUser: User;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -22,10 +24,17 @@ describe('Failure Modes & Boundary Testing', () => {
 
     dataSource = app.get(DataSource);
     ordersService = app.get(OrdersService);
+
+    testUser = dataSource.getRepository(User).create({
+      email: `failure_mode_${Date.now()}@test.com`,
+      password_hash: 'hash',
+      first_name: 'Failure',
+      last_name: 'Mode',
+    });
+    await dataSource.getRepository(User).save(testUser);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
     await app.close();
   });
 
@@ -36,11 +45,17 @@ describe('Failure Modes & Boundary Testing', () => {
       const keyRepo = dataSource.getRepository(IdempotencyKey);
 
       // Save manually
-      await keyRepo.save(keyRepo.create({ key }));
+      await keyRepo.save(
+        keyRepo.create({
+          user_id: testUser.id,
+          key,
+          request_path: '/orders/checkout',
+        }),
+      );
 
       // Simulate checkout which creates a key
       await expect(
-        ordersService.checkout(uuidv4(), { idempotency_key: key }),
+        ordersService.checkout(testUser.id, { idempotency_key: key } as any),
       ).rejects.toThrow(ConflictException);
     });
   });

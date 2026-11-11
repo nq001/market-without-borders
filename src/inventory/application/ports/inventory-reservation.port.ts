@@ -28,3 +28,4 @@ export interface IInventoryReservationPort {
     dto: AdjustInventoryDto,
   ): Promise<Inventory>;
 }
+

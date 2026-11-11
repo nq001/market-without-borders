@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from '../database/entities/notification.entity';
@@ -8,9 +14,10 @@ import { NOTIFICATION_SENDER_PORT } from './application/ports/notification-sende
 import type { INotificationSenderPort } from './application/ports/notification-sender.port';
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name);
   private isProcessing = false;
+  private isShuttingDown = false;
 
   constructor(
     @InjectRepository(Notification)
@@ -19,6 +26,10 @@ export class NotificationsService {
     @Inject(NOTIFICATION_SENDER_PORT)
     private readonly notificationSender?: INotificationSenderPort,
   ) {}
+
+  onModuleDestroy(): void {
+    this.isShuttingDown = true;
+  }
 
   @OnEvent('order.paid')
   async handleOrderPaid(payload: { orderId: string; userId?: string }) {
@@ -35,8 +46,15 @@ export class NotificationsService {
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleCron() {
+    if (this.isShuttingDown || process.env.NODE_ENV === 'test') {
+      return;
+    }
+    await this.processPendingNotifications();
+  }
+
   async processPendingNotifications() {
-    if (this.isProcessing) {
+    if (this.isProcessing || this.isShuttingDown) {
       return;
     }
 

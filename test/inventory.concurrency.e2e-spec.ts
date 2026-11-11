@@ -6,6 +6,7 @@ import { InventoryService } from './../src/inventory/inventory.service';
 import { Product } from './../src/database/entities/product.entity';
 import { Category } from './../src/database/entities/category.entity';
 import { Inventory } from './../src/database/entities/inventory.entity';
+import { InventoryMovement } from './../src/database/entities/inventory-movement.entity';
 
 describe('Inventory Concurrency (e2e)', () => {
   let app: INestApplication;
@@ -26,23 +27,34 @@ describe('Inventory Concurrency (e2e)', () => {
     inventoryService = app.get(InventoryService);
 
     // Setup Test Data
+    const suffix = Date.now();
     const category = dataSource
       .getRepository(Category)
-      .create({ name: 'TestCat', slug: 'test-cat' });
+      .create({ name: `TestCat_${suffix}`, slug: `test-cat-${suffix}` });
     const savedCat = await dataSource.getRepository(Category).save(category);
     testCategoryId = savedCat.id;
   });
 
   afterAll(async () => {
-    await dataSource.getRepository(Product).delete({});
-    await dataSource.getRepository(Category).delete({});
+    if (testProductId) {
+      await dataSource
+        .getRepository(InventoryMovement)
+        .delete({ product_id: testProductId });
+      await dataSource
+        .getRepository(Inventory)
+        .delete({ product_id: testProductId });
+      await dataSource.getRepository(Product).delete({ id: testProductId });
+    }
+    if (testCategoryId) {
+      await dataSource.getRepository(Category).delete({ id: testCategoryId });
+    }
     await app.close();
   });
 
   it('should only allow exactly one concurrent reservation of the final unit', async () => {
     // 1. Create a product with 1 available inventory
     const product = dataSource.getRepository(Product).create({
-      sku: 'TEST-SKU-CONCURRENT',
+      sku: `TEST-SKU-CONCURRENT-${Date.now()}`,
       name: 'Test Product',
       price: 1000,
       category_id: testCategoryId,

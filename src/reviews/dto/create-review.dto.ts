@@ -38,3 +38,4 @@ export class CreateReviewDto {
   @MaxLength(2000)
   comment: string;
 }
+
