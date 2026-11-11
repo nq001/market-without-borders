@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Order } from './order.entity';
 import { ShipmentEvent } from './shipment-event.entity';
+import { BusinessRuleViolationException } from '../../common/domain/domain-exception.base';
 
 @Entity('shipments')
 export class Shipment {
@@ -40,4 +41,26 @@ export class Shipment {
 
   @OneToMany(() => ShipmentEvent, (event) => event.shipment, { cascade: true })
   events: ShipmentEvent[];
+
+  // --- Rich Domain Behavior ---
+
+  public dispatch(trackingNumber: string, provider: string): void {
+    if (this.status !== 'PENDING') {
+      throw new BusinessRuleViolationException(
+        `Cannot dispatch shipment in status ${this.status}`,
+      );
+    }
+    this.status = 'SHIPPED';
+    this.tracking_number = trackingNumber;
+    this.provider = provider;
+  }
+
+  public markDelivered(): void {
+    if (this.status !== 'SHIPPED') {
+      throw new BusinessRuleViolationException(
+        `Cannot deliver shipment in status ${this.status}`,
+      );
+    }
+    this.status = 'DELIVERED';
+  }
 }

@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditLog } from '../database/entities/audit-log.entity';
 import { AuditService } from './audit.service';
 
+@Global()
 @Module({
   imports: [TypeOrmModule.forFeature([AuditLog])],
   providers: [AuditService],

@@ -46,7 +46,9 @@ describe('ShippingService', () => {
       return cb(manager);
     });
 
-    await expect(service.dispatchShipment('1', 'track', 'provider')).rejects.toThrow(BadRequestException);
+    await expect(
+      service.dispatchShipment('1', 'track', 'provider'),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('should throw BadRequest if delivering non-shipped shipment', async () => {
@@ -57,6 +59,8 @@ describe('ShippingService', () => {
       return cb(manager);
     });
 
-    await expect(service.markDelivered('1')).rejects.toThrow(BadRequestException);
+    await expect(service.markDelivered('1')).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });

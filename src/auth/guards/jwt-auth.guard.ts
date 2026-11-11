@@ -7,12 +7,13 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { TokenPayload } from '../auth.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -22,11 +23,23 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Access token missing');
     }
     try {
-      const secret = this.configService.get<string>('JWT_ACCESS_SECRET') ?? '';
-      const payload = await this.jwtService.verifyAsync<
-        Record<string, unknown>
-      >(token, { secret });
-      Object.assign(request, { user: payload });
+      const secret = this.configService.get<string>('JWT_ACCESS_SECRET');
+      if (!secret) {
+        throw new UnauthorizedException('JWT access secret is not configured');
+      }
+      const payload = await this.jwtService.verifyAsync<TokenPayload>(token, {
+        secret,
+      });
+      const normalizedUser: TokenPayload = {
+        ...payload,
+        sub: payload.sub ?? (payload.id as string),
+        id: payload.id ?? payload.sub,
+        roles: Array.isArray(payload.roles) ? payload.roles : [],
+        permissions: Array.isArray(payload.permissions)
+          ? payload.permissions
+          : [],
+      };
+      Object.assign(request, { user: normalizedUser });
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
     }

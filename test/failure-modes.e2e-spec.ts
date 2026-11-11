@@ -32,9 +32,9 @@ describe('Failure Modes & Boundary Testing', () => {
   describe('Idempotency & Concurrency', () => {
     it('should reject duplicate idempotency keys globally', async () => {
       const key = uuidv4();
-      
+
       const keyRepo = dataSource.getRepository(IdempotencyKey);
-      
+
       // Save manually
       await keyRepo.save(keyRepo.create({ key }));
 
@@ -49,7 +49,7 @@ describe('Failure Modes & Boundary Testing', () => {
     it('should rollback and delete idempotency key if provider or internal validation throws', async () => {
       const key = uuidv4();
       const userId = uuidv4(); // User doesn't exist, will throw inside checkout.
-      
+
       // Since userId doesn't exist, getCartAndPricing will fail, and error will bubble up.
       await expect(
         ordersService.checkout(userId, { idempotency_key: key }),

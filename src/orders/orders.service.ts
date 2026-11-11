@@ -1,33 +1,42 @@
-import {
-  Injectable,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Order } from '../database/entities/order.entity';
+import { Repository, DataSource, EntityManager } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Order, OrderStatus } from '../database/entities/order.entity';
 import { OrderItem } from '../database/entities/order-item.entity';
 import { OrderAddressSnapshot } from '../database/entities/order-address-snapshot.entity';
 import { IdempotencyKey } from '../database/entities/idempotency-key.entity';
 import { CartService } from '../cart/cart.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { CheckoutDto } from './dto/checkout.dto';
+import {
+  BusinessRuleViolationException,
+  ConflictDomainException,
+  EntityNotFoundDomainException,
+  isUniqueConstraintError,
+} from '../common/domain/domain-exception.base';
+import { IVerifiedPurchasePort } from './application/ports/verified-purchase.port';
 import * as crypto from 'crypto';
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements IVerifiedPurchasePort {
   constructor(
     @InjectRepository(IdempotencyKey)
     private readonly idempotencyRepo: Repository<IdempotencyKey>,
     private readonly cartService: CartService,
     private readonly inventoryService: InventoryService,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly couponsService?: CouponsService,
+    @Optional()
+    private readonly eventEmitter?: EventEmitter2,
   ) {}
 
   async checkout(
     userId: string,
     dto: CheckoutDto,
-    path: string,
+    path: string = '',
   ): Promise<Order> {
     // 1. Idempotency Check
     const existingKey = await this.idempotencyRepo.findOne({
@@ -38,7 +47,7 @@ export class OrdersService {
       if (existingKey.response_body) {
         return existingKey.response_body as unknown as Order;
       }
-      throw new ConflictException(
+      throw new ConflictDomainException(
         'Request with this idempotency key is already in progress',
       );
     }
@@ -47,42 +56,55 @@ export class OrdersService {
     const { cart, pricing } = await this.cartService.getCartAndPricing(userId);
 
     if (!cart.cartItems || cart.cartItems.length === 0) {
-      throw new BadRequestException('Cart is empty');
+      throw new BusinessRuleViolationException('Cart is empty');
     }
 
     // 3. Register Idempotency Key (in-progress)
     let idempotencyRecord = this.idempotencyRepo.create({
       user_id: userId,
       key: dto.idempotency_key,
-      request_path: path,
+      request_path: path || '',
     });
-    idempotencyRecord = await this.idempotencyRepo.save(idempotencyRecord);
+    try {
+      idempotencyRecord = await this.idempotencyRepo.save(idempotencyRecord);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictDomainException(
+          'Request with this idempotency key is already in progress',
+        );
+      }
+      throw error;
+    }
 
     const orderId = crypto.randomUUID();
-
-    // 4. Reserve Inventory (Throws ConflictException if fails)
-    const reserveItems = cart.cartItems.map((item) => ({
-      productId: item.product_id,
-      quantity: item.quantity,
-    }));
-    await this.inventoryService.reserveInventory(reserveItems, orderId);
+    let inventoryReserved = false;
 
     try {
+      // 4. Reserve Inventory (Throws ConflictException if fails)
+      const reserveItems = cart.cartItems.map((item) => ({
+        productId: item.product_id,
+        quantity: item.quantity,
+      }));
+      await this.inventoryService.reserveInventory(reserveItems, orderId);
+      inventoryReserved = true;
+
       // 5. Transactional Order Creation
       const order = await this.dataSource.transaction(async (manager) => {
-        // Create Order
+        if (cart.coupon_id && this.couponsService) {
+          await this.couponsService.redeemCoupon(cart.coupon_id, manager);
+        }
+
         const newOrder = manager.create(Order, {
           id: orderId,
           user_id: userId,
           coupon_id: cart.coupon_id,
-          status: 'PENDING_PAYMENT',
+          status: OrderStatus.PENDING_PAYMENT,
           subtotal_amount: pricing.subtotal,
           discount_amount: pricing.discount,
           total_amount: pricing.total,
         });
         await manager.save(newOrder);
 
-        // Create Order Items
         for (const item of cart.cartItems) {
           const orderItem = manager.create(OrderItem, {
             order_id: orderId,
@@ -96,7 +118,6 @@ export class OrdersService {
           await manager.save(orderItem);
         }
 
-        // Create Address Snapshot
         const address = manager.create(OrderAddressSnapshot, {
           order_id: orderId,
           full_name: dto.full_name,
@@ -108,14 +129,16 @@ export class OrdersService {
         });
         await manager.save(address);
 
-        // Empty Cart
-        if (cart.cartItems.length > 0) {
-          await manager.remove(cart.cartItems);
+        if (typeof this.cartService.clearCart === 'function') {
+          await this.cartService.clearCart(cart, manager);
+        } else {
+          if (cart.cartItems.length > 0) {
+            await manager.remove(cart.cartItems);
+          }
+          cart.coupon_id = null;
+          cart.coupon = null;
+          await manager.save(cart);
         }
-
-        cart.coupon_id = null;
-        cart.coupon = null;
-        await manager.save(cart);
 
         return newOrder;
       });
@@ -127,14 +150,155 @@ export class OrdersService {
       >;
       await this.idempotencyRepo.save(idempotencyRecord);
 
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('order.placed', {
+          orderId: order.id,
+          userId: order.user_id,
+          totalAmount: order.total_amount,
+        });
+      }
+
       return order;
     } catch (error) {
-      // Release inventory if transaction fails
-      await this.inventoryService.releaseInventory(orderId);
+      if (inventoryReserved) {
+        await this.inventoryService.releaseInventory(orderId);
+      }
 
-      // Delete in-progress idempotency key so they can try again
       await this.idempotencyRepo.remove(idempotencyRecord);
       throw error;
     }
+  }
+
+  async confirmOrderPayment(
+    orderId: string,
+    amount?: number,
+    manager?: EntityManager,
+  ): Promise<{ order: Order; transitioned: boolean }> {
+    const run = async (em: EntityManager) => {
+      const order = await em.findOne(Order, { where: { id: orderId } });
+      if (!order) {
+        throw new EntityNotFoundDomainException(`Order ${orderId} not found`);
+      }
+
+      if (
+        amount !== undefined &&
+        order.total_amount !== undefined &&
+        Number(amount) !== Number(order.total_amount)
+      ) {
+        throw new BusinessRuleViolationException(
+          `Payment amount (${amount}) does not match order total (${order.total_amount})`,
+        );
+      }
+
+      if (order.status !== OrderStatus.PENDING_PAYMENT) {
+        return { order, transitioned: false };
+      }
+
+      if (typeof order.markPaid === 'function') {
+        order.markPaid();
+      } else {
+        order.status = OrderStatus.PAID;
+      }
+
+      await em.save(order);
+      await this.inventoryService.deductInventory(orderId, em);
+
+      return { order, transitioned: true };
+    };
+
+    return manager ? run(manager) : this.dataSource.transaction(run);
+  }
+
+  async failOrderPayment(
+    orderId: string,
+    manager?: EntityManager,
+  ): Promise<{ order: Order; transitioned: boolean }> {
+    const run = async (em: EntityManager) => {
+      const order = await em.findOne(Order, { where: { id: orderId } });
+      if (!order) {
+        throw new EntityNotFoundDomainException(`Order ${orderId} not found`);
+      }
+
+      let transitioned = false;
+      if (typeof order.markPaymentFailed === 'function') {
+        transitioned = order.markPaymentFailed();
+      } else if (order.status === OrderStatus.PENDING_PAYMENT) {
+        order.status = OrderStatus.PAYMENT_FAILED;
+        transitioned = true;
+      }
+
+      if (transitioned) {
+        await em.save(order);
+        await this.inventoryService.releaseInventory(orderId, em);
+      }
+
+      return { order, transitioned };
+    };
+
+    return manager ? run(manager) : this.dataSource.transaction(run);
+  }
+
+  async markOrderShipped(
+    orderId: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const run = async (em: EntityManager) => {
+      const order = await em.findOne(Order, { where: { id: orderId } });
+      if (!order) return;
+      if (typeof order.markShipped === 'function') {
+        order.markShipped();
+      } else {
+        order.status = OrderStatus.SHIPPED;
+      }
+      await em.save(order);
+    };
+
+    if (manager) {
+      await run(manager);
+    } else {
+      await this.dataSource.transaction(run);
+    }
+  }
+
+  async markOrderDelivered(
+    orderId: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const run = async (em: EntityManager) => {
+      const order = await em.findOne(Order, { where: { id: orderId } });
+      if (!order) return;
+      if (typeof order.markDelivered === 'function') {
+        order.markDelivered();
+      } else {
+        order.status = OrderStatus.DELIVERED;
+      }
+      await em.save(order);
+    };
+
+    if (manager) {
+      await run(manager);
+    } else {
+      await this.dataSource.transaction(run);
+    }
+  }
+
+  async hasUserPurchasedProduct(
+    userId: string,
+    productId: string,
+  ): Promise<boolean> {
+    const orderRepo = this.dataSource.getRepository(Order);
+    return orderRepo
+      .createQueryBuilder('order')
+      .innerJoin('order.orderItems', 'item')
+      .where('order.user_id = :userId', { userId })
+      .andWhere('item.product_id = :productId', { productId })
+      .andWhere('order.status IN (:...statuses)', {
+        statuses: [
+          OrderStatus.PAID,
+          OrderStatus.SHIPPED,
+          OrderStatus.DELIVERED,
+        ],
+      })
+      .getExists();
   }
 }

@@ -57,4 +57,32 @@ export class User {
 
   @OneToMany(() => IdempotencyKey, (key) => key.user)
   idempotencyKeys: IdempotencyKey[];
+
+  // --- Rich Domain Behavior ---
+
+  public getRoleNames(): string[] {
+    if (!this.userRoles) return [];
+    const roles: string[] = [];
+    for (const ur of this.userRoles) {
+      if (ur.role?.name) {
+        roles.push(ur.role.name);
+      }
+    }
+    return Array.from(new Set(roles));
+  }
+
+  public getPermissionActions(): string[] {
+    if (!this.userRoles) return [];
+    const permissions: string[] = [];
+    for (const ur of this.userRoles) {
+      if (ur.role?.rolePermissions) {
+        for (const rp of ur.role.rolePermissions) {
+          if (rp.permission?.action) {
+            permissions.push(rp.permission.action);
+          }
+        }
+      }
+    }
+    return Array.from(new Set(permissions));
+  }
 }

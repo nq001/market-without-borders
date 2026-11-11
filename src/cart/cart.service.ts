@@ -1,17 +1,17 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Cart } from '../database/entities/cart.entity';
 import { CartItem } from '../database/entities/cart-item.entity';
-import { Coupon } from '../database/entities/coupon.entity';
-import { Product } from '../database/entities/product.entity';
 import { PricingService, PricingResult } from './pricing.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { ApplyCouponDto } from './dto/apply-coupon.dto';
+import { ProductsService } from '../catalog/products/products.service';
+import { CouponsService } from '../coupons/coupons.service';
+import {
+  BusinessRuleViolationException,
+  EntityNotFoundDomainException,
+} from '../common/domain/domain-exception.base';
 
 export interface CartResponse {
   cart: Cart;
@@ -24,14 +24,12 @@ export class CartService {
     @InjectRepository(Cart) private readonly cartRepository: Repository<Cart>,
     @InjectRepository(CartItem)
     private readonly cartItemRepository: Repository<CartItem>,
-    @InjectRepository(Coupon)
-    private readonly couponRepository: Repository<Coupon>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    private readonly productsService: ProductsService,
+    private readonly couponsService: CouponsService,
     private readonly pricingService: PricingService,
   ) {}
 
-  async getCartAndPricing(userId: string): Promise<CartResponse> {
+  private async getOrCreateCartEntity(userId: string): Promise<Cart> {
     let cart = await this.cartRepository.findOne({
       where: { user_id: userId },
       relations: ['cartItems', 'cartItems.product', 'coupon'],
@@ -43,6 +41,11 @@ export class CartService {
       cart.cartItems = [];
     }
 
+    return cart;
+  }
+
+  async getCartAndPricing(userId: string): Promise<CartResponse> {
+    const cart = await this.getOrCreateCartEntity(userId);
     const pricing = this.pricingService.calculateTotal(
       cart.cartItems,
       cart.coupon || null,
@@ -52,13 +55,19 @@ export class CartService {
   }
 
   async addItem(userId: string, dto: AddCartItemDto): Promise<CartResponse> {
-    const { cart } = await this.getCartAndPricing(userId);
+    if (dto.quantity <= 0) {
+      throw new BusinessRuleViolationException(
+        'Quantity must be greater than 0',
+      );
+    }
 
-    const product = await this.productRepository.findOne({
-      where: { id: dto.product_id },
-    });
+    const cart = await this.getOrCreateCartEntity(userId);
+
+    const product = await this.productsService.findActiveById(dto.product_id);
     if (!product || !product.is_active) {
-      throw new BadRequestException('Product is invalid or inactive');
+      throw new BusinessRuleViolationException(
+        'Product is invalid or inactive',
+      );
     }
 
     let item = await this.cartItemRepository.findOne({
@@ -86,17 +95,19 @@ export class CartService {
     quantity: number,
   ): Promise<CartResponse> {
     if (quantity < 1) {
-      throw new BadRequestException('Quantity must be greater than 0');
+      throw new BusinessRuleViolationException(
+        'Quantity must be greater than 0',
+      );
     }
 
-    const { cart } = await this.getCartAndPricing(userId);
+    const cart = await this.getOrCreateCartEntity(userId);
 
     const item = await this.cartItemRepository.findOne({
       where: { cart_id: cart.id, product_id: productId },
     });
 
     if (!item) {
-      throw new NotFoundException('Item not found in cart');
+      throw new EntityNotFoundDomainException('Item not found in cart');
     }
 
     item.quantity = quantity;
@@ -106,14 +117,14 @@ export class CartService {
   }
 
   async removeItem(userId: string, productId: string): Promise<CartResponse> {
-    const { cart } = await this.getCartAndPricing(userId);
+    const cart = await this.getOrCreateCartEntity(userId);
 
     const item = await this.cartItemRepository.findOne({
       where: { cart_id: cart.id, product_id: productId },
     });
 
     if (!item) {
-      throw new NotFoundException('Item not found in cart');
+      throw new EntityNotFoundDomainException('Item not found in cart');
     }
 
     await this.cartItemRepository.remove(item);
@@ -125,14 +136,9 @@ export class CartService {
     userId: string,
     dto: ApplyCouponDto,
   ): Promise<CartResponse> {
-    const { cart } = await this.getCartAndPricing(userId);
+    const cart = await this.getOrCreateCartEntity(userId);
 
-    const coupon = await this.couponRepository.findOne({
-      where: { code: dto.code },
-    });
-    if (!coupon) {
-      throw new NotFoundException('Coupon not found');
-    }
+    const coupon = await this.couponsService.findByCode(dto.code);
 
     // Will throw if coupon is invalid/expired
     this.pricingService.calculateTotal(cart.cartItems, coupon);
@@ -145,12 +151,31 @@ export class CartService {
   }
 
   async removeCoupon(userId: string): Promise<CartResponse> {
-    const { cart } = await this.getCartAndPricing(userId);
+    const cart = await this.getOrCreateCartEntity(userId);
 
     cart.coupon_id = null;
     cart.coupon = null;
     await this.cartRepository.save(cart);
 
     return this.getCartAndPricing(userId);
+  }
+
+  async clearCart(cart: Cart, manager?: EntityManager): Promise<void> {
+    if (manager) {
+      if (cart.cartItems && cart.cartItems.length > 0) {
+        await manager.remove(cart.cartItems);
+      }
+      cart.coupon_id = null;
+      cart.coupon = null;
+      await manager.save(cart);
+      return;
+    }
+
+    if (cart.cartItems && cart.cartItems.length > 0) {
+      await this.cartItemRepository.remove(cart.cartItems);
+    }
+    cart.coupon_id = null;
+    cart.coupon = null;
+    await this.cartRepository.save(cart);
   }
 }

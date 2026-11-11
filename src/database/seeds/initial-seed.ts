@@ -6,6 +6,7 @@ import { Category } from '../entities/category.entity';
 import { Product } from '../entities/product.entity';
 import { Inventory } from '../entities/inventory.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { PermissionAction } from '../../common/constants/permissions.enum';
 
 async function seed() {
   const dataSource = new DataSource(dataSourceOptions);
@@ -20,36 +21,44 @@ async function seed() {
   const productRepo = dataSource.getRepository(Product);
   const inventoryRepo = dataSource.getRepository(Inventory);
 
-  // Clear existing simple data to avoid conflicts if re-running
   await dataSource.query(
     'TRUNCATE TABLE products, categories, role_permissions, permissions, roles, inventories CASCADE',
   );
 
   console.log('Cleared existing data.');
 
-  // Create permissions
-  const p1 = permRepo.create({ action: 'inventory.update' });
-  const p2 = permRepo.create({ action: 'catalog.manage' });
-  const p3 = permRepo.create({ action: 'orders.view' });
-  await permRepo.save([p1, p2, p3]);
+  // Seed all canonical and controller permission actions
+  const allPermissionActions = Object.values(PermissionAction);
+  const savedPermissions = await permRepo.save(
+    allPermissionActions.map((action) => permRepo.create({ action })),
+  );
 
   // Create roles
   const adminRole = roleRepo.create({
     name: 'ADMIN',
     description: 'Full access',
   });
+  const staffRole = roleRepo.create({
+    name: 'STAFF',
+    description: 'Catalog, inventory, and shipping staff access',
+  });
   const customerRole = roleRepo.create({
     name: 'CUSTOMER',
     description: 'Standard customer',
   });
-  await roleRepo.save([adminRole, customerRole]);
+  await roleRepo.save([adminRole, staffRole, customerRole]);
 
-  // Assign permissions to admin
-  await rolePermRepo.save([
-    rolePermRepo.create({ role: adminRole, permission: p1 }),
-    rolePermRepo.create({ role: adminRole, permission: p2 }),
-    rolePermRepo.create({ role: adminRole, permission: p3 }),
-  ]);
+  // Assign all permissions to ADMIN and STAFF
+  await rolePermRepo.save(
+    savedPermissions.map((permission) =>
+      rolePermRepo.create({ role: adminRole, permission }),
+    ),
+  );
+  await rolePermRepo.save(
+    savedPermissions.map((permission) =>
+      rolePermRepo.create({ role: staffRole, permission }),
+    ),
+  );
 
   // Create categories
   const electronics = categoryRepo.create({

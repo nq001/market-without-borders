@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
@@ -20,23 +20,52 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { UNIT_OF_WORK_PORT } from './common/application/unit-of-work.port';
+import { TypeOrmUnitOfWork } from './common/infrastructure/persistence/typeorm-unit-of-work';
+import { DOMAIN_EVENT_BUS_PORT } from './common/application/event-bus.port';
+import { EventEmitterDomainEventBus } from './common/infrastructure/event-bus/event-emitter-domain-event-bus';
 
+@Global()
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({
+        NODE_ENV: Joi.string()
+          .valid('development', 'production', 'test')
+          .default('development'),
         PORT: Joi.number().default(3000),
         DATABASE_URL: Joi.string().required(),
-        REDIS_URL: Joi.string().required(),
+        REDIS_ENABLED: Joi.string().default('false'),
+        REDIS_URL: Joi.string().optional().allow(''),
+        JWT_ACCESS_SECRET: Joi.string()
+          .min(8)
+          .default('dev_jwt_access_secret_key_change_in_prod'),
+        JWT_REFRESH_SECRET: Joi.string()
+          .min(8)
+          .default('dev_jwt_refresh_secret_key_change_in_prod'),
+        JWT_ACCESS_EXPIRATION: Joi.string().default('15m'),
+        JWT_REFRESH_EXPIRATION: Joi.string().default('7d'),
+        PAYMENT_WEBHOOK_SECRET: Joi.string().default(
+          'dev_webhook_secret_key_change_in_prod',
+        ),
       }),
     }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        transport: {
-          target: 'pino-pretty',
-          options: { singleLine: true },
-        },
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const isProd = configService.get<string>('NODE_ENV') === 'production';
+        return {
+          pinoHttp: isProd
+            ? {}
+            : {
+                transport: {
+                  target: 'pino-pretty',
+                  options: { singleLine: true },
+                },
+              },
+        };
       },
     }),
     TypeOrmModule.forRootAsync({
@@ -45,7 +74,8 @@ import { ReviewsModule } from './reviews/reviews.module';
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: false, // Strict control via migrations in production
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: false,
       }),
       inject: [ConfigService],
     }),
@@ -67,5 +97,18 @@ import { ReviewsModule } from './reviews/reviews.module';
     NotificationsModule,
     ReviewsModule,
   ],
+  providers: [
+    TypeOrmUnitOfWork,
+    {
+      provide: UNIT_OF_WORK_PORT,
+      useExisting: TypeOrmUnitOfWork,
+    },
+    EventEmitterDomainEventBus,
+    {
+      provide: DOMAIN_EVENT_BUS_PORT,
+      useExisting: EventEmitterDomainEventBus,
+    },
+  ],
+  exports: [UNIT_OF_WORK_PORT, DOMAIN_EVENT_BUS_PORT],
 })
 export class AppModule {}

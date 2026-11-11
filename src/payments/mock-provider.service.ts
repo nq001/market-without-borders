@@ -18,7 +18,7 @@ export class MockProviderService {
       data: {
         order_id: orderId,
         amount: 1000,
-      }
+      },
     };
   }
 }

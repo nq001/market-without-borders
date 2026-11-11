@@ -100,7 +100,9 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
       expect(res.body.status).toBe('PENDING_MODERATION');
 
       // Verify in DB
-      const review = await dataSource.getRepository(Review).findOne({ where: { id: res.body.id } });
+      const review = await dataSource
+        .getRepository(Review)
+        .findOne({ where: { id: res.body.id } });
       expect(review).toBeDefined();
     });
 
@@ -140,14 +142,17 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
   describe('Notifications (Outbox Pattern)', () => {
     it('should create a PENDING notification when order.paid event is emitted', async () => {
       // Manually emit the event instead of running full payment cycle
-      eventEmitter.emit('order.paid', { orderId: testOrder.id, userId: testUser.id });
+      eventEmitter.emit('order.paid', {
+        orderId: testOrder.id,
+        userId: testUser.id,
+      });
 
       // Give event emitter a moment to process async listener
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const notifications = await dataSource.getRepository(Notification).find({
         where: { user_id: testUser.id, type: 'ORDER_CONFIRMATION' },
-        order: { created_at: 'DESC' }
+        order: { created_at: 'DESC' },
       });
 
       expect(notifications.length).toBeGreaterThan(0);
@@ -170,7 +175,9 @@ describe('Phase 14 (Notifications, Reviews, Audit) (e2e)', () => {
 
       await dataSource.getRepository(AuditLog).save(auditLog);
 
-      const saved = await dataSource.getRepository(AuditLog).findOne({ where: { id: auditLog.id } });
+      const saved = await dataSource
+        .getRepository(AuditLog)
+        .findOne({ where: { id: auditLog.id } });
       expect(saved).toBeDefined();
       expect(saved?.action).toBe('UPDATE_PRODUCT');
     });
