@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #F4EFE6;
+  --color-sand: #E9E2D4;
+  --color-sand-hover: #E3DACA;
+  --color-forest: #123B30;
+  --color-forest-light: #1B5443;
+  --color-amber: #E6A93B;
+  --color-ink: #15201B;
+  --color-muted: #5F5A50;
+  --color-muted-dark: #3E3B34;
+
+  --color-category-green: #C6D8C9;
+  --color-category-yellow: #EBCF9B;
+  --color-category-peach: #E8C9BB;
+
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom utility for italic emphasis words in headings */
+.font-heading-italic {
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-weight: 500;
+}
+

@@ -1,63 +1,18 @@
-# 20-Phase End-to-End Engineering Plan
+# Implementation Phases Directory
 
-This directory contains the complete 20-phase execution plan for building Qubrax from product discovery to real production use.
+The implementation documentation for the Market Without Borders (MWB) platform is cleanly segregated by architectural tier:
 
-## Rule
-
-Every phase is **end-to-end within its scope** and has:
-
-- Objective
-- Deliverables
-- End-to-end work
-- Exit criteria
-- Evidence
-- Explicit critical scenarios where applicable
-
-Do not treat a phase as complete because code compiles. Complete it only when its exit criteria and evidence exist.
-
-## Sequence
-
-1. Product Discovery & Scope
-2. Requirements Engineering
-3. Domain Modeling
-4. Architecture & ADRs
-5. Database Design
-6. API Contract
-7. NestJS Foundation
-8. Authentication & Authorization
-9. Catalog
-10. Inventory & Concurrency
-11. Cart, Pricing & Coupons
-12. Orders & Checkout Reliability
-13. Payments & Shipping
-14. Notifications, Reviews & Audit
-15. Comprehensive Testing
-16. Docker & Local Production Parity
-17. CI/CD
-18. Production Deployment
-19. Observability, Performance & Failure Testing
-20. Documentation, Launch & Real-World Qubrax Readiness
-
-## Completion Standard
-
-Phase 20 is the production-readiness gate. The goal is not "all endpoints exist"; the goal is a working, documented, tested, observable, secure, deployable Qubrax system.
-
-## Recommended Repository Documentation
-
-```text
-README.md
-docs/
-├── 01-product/
-├── 02-design/
-├── 03-reliability/
-├── 04-operations/
-├── 05-testing/
-├── decisions/
-└── case-study.md
+```
+docs/phases/
+├── backend/    # 20 Engineering stages for NestJS + PostgreSQL + TypeORM backend
+└── frontend/   # 6 UI/UX implementation stages for React 19 + Vite + TailwindCSS frontend
 ```
 
-## Master Rule
+---
 
-> Build less. Understand more. Ship seriously. Measure everything.
+## 📁 [Backend Phases (`docs/phases/backend/`)](./backend/README.md)
+Contains the 20 implementation stages governing the distributed commerce backend, from product discovery and domain modeling to PostgreSQL database schemas, pessimistic row-locking concurrency, multi-store split ordering, and comprehensive Jest E2E resilience suites.
 
-The project should optimize for correctness, clarity, reliability, security, measurability, maintainability, and real production behavior.
+## 📁 [Frontend Phases (`docs/phases/frontend/`)](./frontend/README.md)
+Contains the 6 implementation stages governing the frontend presentation layer, including the 14-section Super Admin Console, the 11-section Store Owner Workspace, the customer shopping experience with shared cart and split checkout, bilingual English/Arabic RTL layout rendering, Vitest unit testing, and Vite production builds.
+
