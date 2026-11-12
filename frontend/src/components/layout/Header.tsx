@@ -4,6 +4,7 @@ import { Logo } from '../common/Logo';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { isMockDataEnabled } from '../../api/client';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -46,7 +47,17 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="w-full relative z-30">
       {/* 1. Announcement Bar */}
       <div className="w-full bg-ink text-sand py-2.5 px-4 text-center text-xs md:text-sm tracking-normal">
-        <span>One cart for all independent stores. Shop multiple artisans and checkout once!</span>
+        {isMockDataEnabled ? (
+          <span className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="bg-forest-light/30 text-paper font-semibold px-2 py-0.5 rounded text-[11px] uppercase tracking-wide">
+              Live Demo Mode
+            </span>
+            <span>Running on pre-loaded seed data. Enterprise NestJS + PostgreSQL backend is complete.</span>
+            <span className="text-sand/80 underline cursor-pointer">Contact us for live DB demo</span>
+          </span>
+        ) : (
+          <span>One cart for all independent stores. Shop multiple artisans and checkout once!</span>
+        )}
       </div>
 
       {/* 2. Main Navigation Bar (Section 4.1) */}

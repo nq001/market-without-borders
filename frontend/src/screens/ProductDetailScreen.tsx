@@ -64,7 +64,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
 
   useEffect(() => {
     // Look up product or use fallback
-    const found = FALLBACK_PRODUCTS.find((p) => p.id === productId) || FALLBACK_PRODUCTS[0];
+    const found = FALLBACK_PRODUCTS.find((p: Product) => p.id === productId) || FALLBACK_PRODUCTS[0];
     setProduct(found);
     setQuantity(1);
   }, [productId]);

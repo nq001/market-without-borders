@@ -5,7 +5,7 @@ import { Footer } from '../components/layout/Footer';
 import { formatPrice } from '../utils/currency';
 import { StockBadge } from '../components/common/StockBadge';
 import { useCart } from '../context/CartContext';
-import { FALLBACK_CATEGORIES, FALLBACK_PRODUCTS } from '../api/client';
+import { FALLBACK_CATEGORIES, FALLBACK_PRODUCTS, Category, Product } from '../api/client';
 
 interface CategoryShowcaseScreenProps {
   categoryId: string;
@@ -21,7 +21,7 @@ export const CategoryShowcaseScreen: React.FC<CategoryShowcaseScreenProps> = ({
   onBack,
 }) => {
   const { addItem } = useCart();
-  const category = FALLBACK_CATEGORIES.find((c) => c.id === categoryId) || FALLBACK_CATEGORIES[0];
+  const category = FALLBACK_CATEGORIES.find((c: Category) => c.id === categoryId) || FALLBACK_CATEGORIES[0];
   const products = FALLBACK_PRODUCTS;
 
   return (
@@ -52,7 +52,7 @@ export const CategoryShowcaseScreen: React.FC<CategoryShowcaseScreenProps> = ({
           {category.children && category.children.length > 0 && (
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <span className="text-xs font-semibold text-muted mr-1">Subcategories:</span>
-              {category.children.map((sub) => (
+              {category.children.map((sub: Category) => (
                 <button
                   key={sub.id}
                   type="button"
@@ -79,7 +79,7 @@ export const CategoryShowcaseScreen: React.FC<CategoryShowcaseScreenProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((p) => {
+            {products.map((p: Product) => {
               const available = p.inventory?.available_quantity ?? 50;
               return (
                 <div

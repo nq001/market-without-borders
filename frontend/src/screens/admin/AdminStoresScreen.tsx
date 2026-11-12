@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency } from '../../utils/currency';
+import { MOCK_STORES } from '../../data/mockDatabase';
 
 interface StoreItem {
   id: string;
@@ -48,50 +49,22 @@ export const AdminStoresScreen: React.FC<AdminStoresScreenProps> = ({
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PENDING' | 'SUSPENDED'>('ALL');
   const [selectedDrawerStore, setSelectedDrawerStore] = useState<StoreItem | null>(null);
 
-  const [stores, setStores] = useState<StoreItem[]>([
-    {
-      id: 'store-1',
-      name: 'Artisan Handcrafts',
-      slug: 'artisan-handcrafts',
-      description: 'Handmade pottery, woven ceramics, and fine woodcraft items.',
-      status: 'ACTIVE',
-      owner_name: 'Elena Rostova',
-      owner_email: 'staff@mwb.com',
-      owner_id: 'usr-1',
-      category_name: 'Ceramics & Home Decor',
-      productCount: 28,
-      grossSales: 840000,
-      created_at: '2026-09-12',
-    },
-    {
-      id: 'store-2',
-      name: 'Heritage Textiles',
-      slug: 'heritage-textiles',
-      description: 'Traditional loomed rugs, raw cotton scarves, and linen fabrics.',
-      status: 'ACTIVE',
-      owner_name: 'Marcus Vance',
-      owner_email: 'marcus@heritage.com',
-      owner_id: 'usr-2',
-      category_name: 'Apparel & Textiles',
-      productCount: 20,
-      grossSales: 408000,
-      created_at: '2026-10-01',
-    },
-    {
-      id: 'store-3',
-      name: 'Nomad Leatherworks',
-      slug: 'nomad-leather',
-      description: 'Full-grain vegetable-tanned leather goods and bespoke luggage.',
-      status: 'PENDING',
-      owner_name: 'Tariq Al-Mansoor',
-      owner_email: 'tariq@nomad.com',
-      owner_id: 'usr-3',
-      category_name: 'Accessories',
-      productCount: 6,
-      grossSales: 0,
-      created_at: '2026-11-10',
-    },
-  ]);
+  const [stores, setStores] = useState<StoreItem[]>(
+    MOCK_STORES.map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      description: s.description,
+      status: s.status,
+      owner_name: s.owner_name,
+      owner_email: s.owner_email,
+      owner_id: s.owner_id,
+      category_name: s.category_name,
+      productCount: s.product_count,
+      grossSales: s.gross_sales,
+      created_at: s.created_at,
+    }))
+  );
 
   const handleToggleStoreStatus = (storeId: string) => {
     setStores((prev) =>

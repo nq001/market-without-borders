@@ -12,14 +12,15 @@ import {
   Filter,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { MOCK_USERS } from '../../data/mockDatabase';
 
 interface UserRecord {
   id: string;
   email: string;
   first_name: string;
   last_name: string;
-  role: 'OWNER' | 'CUSTOMER' | 'ADMIN';
-  approval_status: 'PENDING_APPROVAL' | 'ACTIVE' | 'SUSPENDED';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'OWNER' | 'CUSTOMER';
+  approval_status: 'PENDING_APPROVAL' | 'ACTIVE' | 'SUSPENDED' | 'REJECTED';
   store_name?: string;
   store_id?: string;
   created_at: string;
@@ -44,46 +45,19 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({
   const [deleteStoreCheckbox, setDeleteStoreCheckbox] = useState(false);
 
   // Mock initial seed + fetch state
-  const [users, setUsers] = useState<UserRecord[]>([
-    {
-      id: 'usr-1',
-      email: 'staff@mwb.com',
-      first_name: 'Fulfillment',
-      last_name: 'Staff',
-      role: 'OWNER',
-      approval_status: 'ACTIVE',
-      store_name: 'Artisan Handcrafts',
-      store_id: 'store-1',
-      created_at: '2026-11-10',
-    },
-    {
-      id: 'usr-2',
-      email: 'customer@mwb.com',
-      first_name: 'Jane',
-      last_name: 'Customer',
-      role: 'CUSTOMER',
-      approval_status: 'ACTIVE',
-      created_at: '2026-11-11',
-    },
-    {
-      id: 'usr-3',
-      email: 'pending.artisan@workshop.com',
-      first_name: 'Marcus',
-      last_name: 'Vance',
-      role: 'CUSTOMER',
-      approval_status: 'PENDING_APPROVAL',
-      created_at: '2026-11-12',
-    },
-    {
-      id: 'usr-4',
-      email: 'pottery.maker@handcraft.com',
-      first_name: 'Elena',
-      last_name: 'Rostova',
-      role: 'CUSTOMER',
-      approval_status: 'PENDING_APPROVAL',
-      created_at: '2026-11-12',
-    },
-  ]);
+  const [users, setUsers] = useState<UserRecord[]>(
+    MOCK_USERS.map((u) => ({
+      id: u.id,
+      email: u.email,
+      first_name: u.first_name,
+      last_name: u.last_name,
+      role: u.role,
+      approval_status: u.approval_status === 'PENDING' ? 'PENDING_APPROVAL' : u.approval_status,
+      store_name: u.store_name,
+      store_id: u.store_id,
+      created_at: u.created_at,
+    }))
+  );
 
   // Section 2.2: Accept or Reject Pending Users
   const handleApprovalAction = (userId: string, action: 'accept' | 'reject') => {
@@ -107,8 +81,8 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({
   };
 
   // Section 2.2: Change User Role (Owner <-> Customer)
-  const handleToggleRole = (userId: string, currentRole: 'OWNER' | 'CUSTOMER' | 'ADMIN') => {
-    if (currentRole === 'ADMIN') {
+  const handleToggleRole = (userId: string, currentRole: UserRecord['role']) => {
+    if (currentRole === 'ADMIN' || currentRole === 'SUPER_ADMIN') {
       showToast({ type: 'warning', title: 'Action Denied', description: 'Admin roles are protected.' });
       return;
     }
@@ -267,7 +241,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({
                         >
                           {user.role}
                         </span>
-                        {user.role !== 'ADMIN' && (
+                        {user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && (
                           <button
                             type="button"
                             onClick={() => handleToggleRole(user.id, user.role)}
