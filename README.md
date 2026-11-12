@@ -12,7 +12,7 @@
 
 <br />
 
-Welcome to **Qubrax** — an open-source, enterprise-grade commerce backend. 
+Welcome to — an open-source, enterprise-grade commerce backend. 
 
 Building a simple shopping cart is easy. Building a fault-tolerant system that prevents inventory overselling during traffic spikes, handles payment gateway timeouts gracefully, and maintains strict data consistency across domains? That requires deliberate, careful engineering.
 
